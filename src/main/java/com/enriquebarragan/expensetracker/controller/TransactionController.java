@@ -1,15 +1,19 @@
 package com.enriquebarragan.expensetracker.controller;
 
+import com.enriquebarragan.expensetracker.dto.SummaryResponse;
 import com.enriquebarragan.expensetracker.dto.TransactionRequest;
 import com.enriquebarragan.expensetracker.dto.TransactionResponse;
 import com.enriquebarragan.expensetracker.service.TransactionService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +22,7 @@ import java.util.List;
 @RequestMapping("/api/transactions")
 @Tag(name = "Transactions", description = "Management of financial transactions")
 @RequiredArgsConstructor
+@Validated
 public class TransactionController {
 
     private final TransactionService transactionService;
@@ -63,5 +68,14 @@ public class TransactionController {
 
         transactionService.delete(id, userDetails.getUsername());
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<SummaryResponse> getSummary(
+            @RequestParam @Min(1) @Max(12) Integer month,
+            @RequestParam Integer year,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        return ResponseEntity.ok(transactionService.getSummary(month, year, userDetails.getUsername()));
     }
 }

@@ -1,9 +1,12 @@
 package com.enriquebarragan.expensetracker.service;
 
+import com.enriquebarragan.expensetracker.dto.CategorySummary;
+import com.enriquebarragan.expensetracker.dto.SummaryResponse;
 import com.enriquebarragan.expensetracker.dto.TransactionRequest;
 import com.enriquebarragan.expensetracker.dto.TransactionResponse;
 import com.enriquebarragan.expensetracker.model.Category;
 import com.enriquebarragan.expensetracker.model.Transaction;
+import com.enriquebarragan.expensetracker.model.TransactionType;
 import com.enriquebarragan.expensetracker.model.User;
 import com.enriquebarragan.expensetracker.repository.CategoryRepository;
 import com.enriquebarragan.expensetracker.repository.TransactionRepository;
@@ -11,6 +14,9 @@ import com.enriquebarragan.expensetracker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -94,6 +100,52 @@ public class TransactionService {
         }
 
         transactionRepository.delete(transaction);
+    }
+
+    public SummaryResponse getSummary(Integer month, Integer year, String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        LocalDate startDate = LocalDate.of(year, month, 1);
+        LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+
+        BigDecimal totalIncome = transactionRepository.sumByUserAndTypeAndDateBetween(
+                user, TransactionType.INCOME, startDate, endDate);
+
+        BigDecimal totalExpenses = transactionRepository.sumByUserAndTypeAndDateBetween(
+                user, TransactionType.EXPENSE, startDate, endDate);
+
+        BigDecimal balance = totalIncome.subtract(totalExpenses);
+
+        List<Object[]> categoryResults = transactionRepository.sumByCategoryAndDateBetween(
+                user, TransactionType.EXPENSE, startDate, endDate);
+
+        List<CategorySummary> expensesByCategory = categoryResults.stream()
+                .map(row -> {
+                    String categoryName = (String) row[0];
+                    BigDecimal total = (BigDecimal) row[1];
+                    double percentage = totalExpenses.compareTo(BigDecimal.ZERO) > 0
+                            ? total.divide(totalExpenses, 4, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100))
+                            .doubleValue()
+                            : 0.0;
+
+                    return CategorySummary.builder()
+                            .categoryName(categoryName)
+                            .total(total)
+                            .percentage(percentage)
+                            .build();
+                })
+                .toList();
+
+        return SummaryResponse.builder()
+                .month(month)
+                .year(year)
+                .totalIncome(totalIncome)
+                .totalExpenses(totalExpenses)
+                .balance(balance)
+                .expensesByCategory(expensesByCategory)
+                .build();
     }
 
     private TransactionResponse toResponse(Transaction transaction) {
